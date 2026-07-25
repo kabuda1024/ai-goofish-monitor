@@ -1,5 +1,9 @@
 // Based on the Pydantic model in the backend
 
+export type Platform = 'xianyu' | 'mercari';
+
+export type PlatformOptions = Record<string, unknown>;
+
 export interface Task {
   id: number;
   task_name: string;
@@ -23,6 +27,8 @@ export interface Task {
   decision_mode: 'ai' | 'keyword';
   keyword_rules: string[];
   is_running: boolean;
+  platform?: Platform;
+  platform_options?: PlatformOptions;
 }
 
 export type TaskGenerationStatus = 'queued' | 'running' | 'completed' | 'failed';
@@ -73,4 +79,6 @@ export interface TaskGenerateRequest {
   region?: string | null;
   decision_mode?: 'ai' | 'keyword';
   keyword_rules?: string[];
+  platform?: Platform;
+  platform_options?: PlatformOptions;
 }

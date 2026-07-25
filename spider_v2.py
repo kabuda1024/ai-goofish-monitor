@@ -9,7 +9,7 @@ import re
 
 from src.config import STATE_FILE
 from src.infrastructure.persistence.sqlite_task_repository import SqliteTaskRepository
-from src.scraper import scrape_xianyu
+from src.scrapers import get_scraper_class
 
 
 async def main():
@@ -92,9 +92,15 @@ async def main():
         return False
 
     if not os.path.exists(STATE_FILE) and not has_bound_account(tasks_config) and not has_any_state_file():
-        sys.exit(
-            f"错误: 未找到登录状态文件。请在 state/ 中添加账号或配置 account_state_file。"
+        # 只有当至少存在一个需要登录态的平台任务(默认为闲鱼)时才拦截。
+        needs_login = any(
+            (task.get("platform") or "xianyu").lower() == "xianyu"
+            for task in tasks_config
         )
+        if needs_login:
+            sys.exit(
+                f"错误: 未找到登录状态文件。请在 state/ 中添加账号或配置 account_state_file。"
+            )
 
     # 读取所有prompt文件内容（关键词模式不需要加载prompt）
     for task in tasks_config:
@@ -188,8 +194,13 @@ async def main():
 
     tasks = []
     for task_conf in active_task_configs:
-        print(f"-> 任务 '{task_conf['task_name']}' 已加入执行队列。")
-        tasks.append(asyncio.create_task(scrape_xianyu(task_config=task_conf, debug_limit=args.debug_limit)))
+        platform = (task_conf.get("platform") or "xianyu").lower()
+        print(
+            f"-> 任务 '{task_conf['task_name']}' (platform={platform}) 已加入执行队列。"
+        )
+        scraper_cls = get_scraper_class(platform)
+        scraper = scraper_cls(task_config=task_conf, debug_limit=args.debug_limit)
+        tasks.append(asyncio.create_task(scraper.run()))
 
     async def _shutdown_watcher():
         await stop_event.wait()

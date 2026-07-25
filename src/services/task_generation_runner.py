@@ -19,7 +19,35 @@ def build_criteria_filename(keyword: str) -> str:
     return f"prompts/{safe_keyword}_criteria.txt"
 
 
+PLATFORM_BASE_PROMPT_FILES = {
+    "xianyu": "prompts/xianyu/base_prompt.txt",
+    "mercari": "prompts/mercari/base_prompt.txt",
+}
+
+PLATFORM_REFERENCE_CRITERIA_FILES = {
+    "xianyu": "prompts/xianyu/macbook_criteria.txt",
+    "mercari": "prompts/xianyu/macbook_criteria.txt",  # Mercari 暂时复用同一份参考,后续补日语版
+}
+
+
+def _resolve_base_prompt(platform: str) -> str:
+    """按平台派发 base_prompt 路径,回退到通用文件(保持向后兼容)。"""
+    normalized = (platform or "xianyu").lower()
+    candidate = PLATFORM_BASE_PROMPT_FILES.get(normalized)
+    if candidate and os.path.exists(candidate):
+        return candidate
+    return "prompts/base_prompt.txt"
+
+
+def _resolve_reference_criteria(platform: str) -> str:
+    normalized = (platform or "xianyu").lower()
+    return PLATFORM_REFERENCE_CRITERIA_FILES.get(
+        normalized, "prompts/macbook_criteria.txt"
+    )
+
+
 def build_task_create(req: TaskGenerateRequest, criteria_file: str) -> TaskCreate:
+    platform = getattr(req, "platform", "xianyu") or "xianyu"
     return TaskCreate(
         task_name=req.task_name,
         enabled=True,
@@ -31,7 +59,7 @@ def build_task_create(req: TaskGenerateRequest, criteria_file: str) -> TaskCreat
         min_price=req.min_price,
         max_price=req.max_price,
         cron=req.cron,
-        ai_prompt_base_file="prompts/base_prompt.txt",
+        ai_prompt_base_file=_resolve_base_prompt(platform),
         ai_prompt_criteria_file=criteria_file,
         account_state_file=req.account_state_file,
         account_strategy=req.account_strategy,
@@ -40,6 +68,8 @@ def build_task_create(req: TaskGenerateRequest, criteria_file: str) -> TaskCreat
         region=req.region,
         decision_mode=req.decision_mode or "ai",
         keyword_rules=req.keyword_rules,
+        platform=platform,
+        platform_options=getattr(req, "platform_options", {}) or {},
     )
 
 
@@ -89,9 +119,12 @@ async def run_ai_generation_job(
         async def report_progress(step_key: str, message: str) -> None:
             await advance_job(generation_service, job_id, step_key, message)
 
+        reference_file = _resolve_reference_criteria(
+            getattr(req, "platform", "xianyu") or "xianyu"
+        )
         generated_criteria = await generate_criteria(
             user_description=req.description or "",
-            reference_file_path="prompts/macbook_criteria.txt",
+            reference_file_path=reference_file,
             progress_callback=report_progress,
         )
 

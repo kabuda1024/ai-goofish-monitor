@@ -4,7 +4,7 @@
 """
 import re
 from enum import Enum
-from typing import Any, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -104,6 +104,21 @@ def _normalize_price_value(value):
     return value
 
 
+def _normalize_platform_options(value: Any) -> Dict[str, Any]:
+    if value is None or value == "":
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        import json as _json
+        try:
+            parsed = _json.loads(value)
+        except (ValueError, TypeError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
 class Task(BaseModel):
     """任务实体"""
 
@@ -130,6 +145,8 @@ class Task(BaseModel):
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
     is_running: bool = False
+    platform: Literal["xianyu", "mercari"] = "xianyu"
+    platform_options: Dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -140,6 +157,11 @@ class Task(BaseModel):
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)
+
+    @field_validator("platform_options", mode="before")
+    @classmethod
+    def normalize_platform_options(cls, value):
+        return _normalize_platform_options(value)
 
     def can_start(self) -> bool:
         """检查任务是否可以启动"""
@@ -179,6 +201,8 @@ class TaskCreate(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
+    platform: Literal["xianyu", "mercari"] = "xianyu"
+    platform_options: Dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -209,6 +233,11 @@ class TaskCreate(BaseModel):
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)
+
+    @field_validator("platform_options", mode="before")
+    @classmethod
+    def normalize_platform_options(cls, value):
+        return _normalize_platform_options(value)
 
     @model_validator(mode="after")
     def validate_decision_mode_payload(self):
@@ -247,6 +276,8 @@ class TaskUpdate(BaseModel):
     decision_mode: Optional[Literal["ai", "keyword"]] = None
     keyword_rules: Optional[List[str]] = None
     is_running: Optional[bool] = None
+    platform: Optional[Literal["xianyu", "mercari"]] = None
+    platform_options: Optional[Dict[str, Any]] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -277,6 +308,13 @@ class TaskUpdate(BaseModel):
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)
+
+    @field_validator("platform_options", mode="before")
+    @classmethod
+    def normalize_platform_options(cls, value):
+        if value is None:
+            return None
+        return _normalize_platform_options(value)
 
     @model_validator(mode="after")
     def validate_partial_keyword_payload(self):
@@ -310,6 +348,8 @@ class TaskGenerateRequest(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
+    platform: Literal["xianyu", "mercari"] = "xianyu"
+    platform_options: Dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -345,6 +385,11 @@ class TaskGenerateRequest(BaseModel):
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)
+
+    @field_validator("platform_options", mode="before")
+    @classmethod
+    def normalize_platform_options(cls, value):
+        return _normalize_platform_options(value)
 
     @model_validator(mode="after")
     def validate_decision_mode_payload(self):

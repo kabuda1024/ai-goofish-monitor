@@ -113,6 +113,8 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
         defaultValues.new_publish_option || props.initialData.new_publish_option || '__none__',
       region: defaultValues.region || props.initialData.region || '',
       decision_mode: defaultValues.decision_mode || props.initialData.decision_mode || 'ai',
+      platform: defaultValues.platform || props.initialData.platform || 'xianyu',
+      platform_options: defaultValues.platform_options || props.initialData.platform_options || {},
     }
     keywordRulesInput.value = (defaultValues.keyword_rules || props.initialData.keyword_rules || []).join('\n')
     // 编辑模式下，根据 cron 值判断模式
@@ -135,6 +137,8 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
       new_publish_option: '__none__',
       region: '',
       decision_mode: 'ai',
+      platform: 'xianyu',
+      platform_options: {},
       ...defaultValues,
     }
     if (!form.value.account_strategy) {
@@ -145,6 +149,12 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
     }
     if (!form.value.new_publish_option) {
       form.value.new_publish_option = '__none__'
+    }
+    if (!form.value.platform) {
+      form.value.platform = 'xianyu'
+    }
+    if (!form.value.platform_options || typeof form.value.platform_options !== 'object') {
+      form.value.platform_options = {}
     }
     keywordRulesInput.value = ''
     if (defaultValues.keyword_rules && defaultValues.keyword_rules.length > 0) {
@@ -215,8 +225,16 @@ function handleSubmit() {
 
   // Filter out fields that shouldn't be sent in update requests
   const { id, is_running, next_run_at, ...submitData } = form.value as any
+  const platform = submitData.platform || 'xianyu'
   const currentAccountStrategy = accountStrategy.value || 'auto'
-  if (currentAccountStrategy === 'fixed') {
+  if (platform === 'mercari') {
+    // Mercari 不需要登录态/账号
+    submitData.account_state_file = null
+    submitData.account_strategy = 'auto'
+    submitData.personal_only = false
+    submitData.new_publish_option = ''
+    submitData.region = ''
+  } else if (currentAccountStrategy === 'fixed') {
     const currentAccountStateFile = selectedAccountStateFile.value || AUTO_ACCOUNT_VALUE
     if (currentAccountStateFile === AUTO_ACCOUNT_VALUE) {
       toast({
@@ -227,11 +245,13 @@ function handleSubmit() {
       return
     }
     submitData.account_state_file = currentAccountStateFile
+    submitData.account_strategy = currentAccountStrategy
   } else {
     submitData.account_state_file = null
+    submitData.account_strategy = currentAccountStrategy
   }
 
-  if (typeof submitData.region === 'string') {
+  if (platform !== 'mercari' && typeof submitData.region === 'string') {
     const normalized = submitData.region
       .trim()
       .split('/')
@@ -246,9 +266,11 @@ function handleSubmit() {
   }
 
   submitData.decision_mode = decisionMode
-  submitData.account_strategy = currentAccountStrategy
   submitData.analyze_images = submitData.analyze_images !== false
   submitData.keyword_rules = decisionMode === 'keyword' ? keywordRules : []
+  if (!submitData.platform_options || typeof submitData.platform_options !== 'object') {
+    submitData.platform_options = {}
+  }
   if (decisionMode === 'keyword' && !submitData.description) {
     submitData.description = ''
   }
@@ -260,6 +282,23 @@ function handleSubmit() {
 <template>
   <form id="task-form" @submit.prevent="handleSubmit">
     <div class="grid gap-6 py-4">
+      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+        <Label class="sm:text-right">平台</Label>
+        <div class="sm:col-span-3">
+          <Select v-model="form.platform">
+            <SelectTrigger>
+              <SelectValue placeholder="选择监控平台" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="xianyu">闲鱼 (Goofish)</SelectItem>
+              <SelectItem value="mercari">Mercari (日本)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p class="text-xs text-gray-500 mt-1">
+            切换平台会调整下方可用的过滤项;闲鱼需要登录态,Mercari 则不需要。
+          </p>
+        </div>
+      </div>
       <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label for="task-name" class="sm:text-right">{{ t('tasks.form.taskName') }}</Label>
         <Input id="task-name" v-model="form.task_name" class="sm:col-span-3" :placeholder="t('tasks.form.taskNamePlaceholder')" required />
@@ -367,7 +406,7 @@ function handleSubmit() {
           </Tabs>
         </div>
       </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div v-if="form.platform !== 'mercari'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label class="sm:text-right">{{ t('tasks.form.accountStrategyLabel') }}</Label>
         <div class="space-y-2 sm:col-span-3">
           <select
@@ -384,7 +423,7 @@ function handleSubmit() {
           </p>
         </div>
       </div>
-      <div v-if="accountStrategy === 'fixed'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div v-if="form.platform !== 'mercari' && accountStrategy === 'fixed'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label class="sm:text-right">{{ t('tasks.form.fixedAccount') }}</Label>
         <div class="sm:col-span-3">
           <select
@@ -399,7 +438,7 @@ function handleSubmit() {
           </select>
         </div>
       </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div v-if="form.platform !== 'mercari'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label for="personal-only" class="sm:text-right">{{ t('tasks.form.personalOnly') }}</Label>
         <div class="sm:col-span-3">
           <Switch id="personal-only" v-model="form.personal_only" />
@@ -411,7 +450,7 @@ function handleSubmit() {
           <Switch id="free-shipping" v-model="form.free_shipping" />
         </div>
       </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div v-if="form.platform !== 'mercari'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label class="sm:text-right">{{ t('tasks.form.newPublish') }}</Label>
         <div class="sm:col-span-3">
           <Select v-model="form.new_publish_option as any">
@@ -429,11 +468,18 @@ function handleSubmit() {
           </Select>
         </div>
       </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div v-if="form.platform !== 'mercari'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label class="sm:text-right">{{ t('tasks.form.region') }}</Label>
         <div class="space-y-1 sm:col-span-3">
           <TaskRegionSelector v-model="form.region as any" />
           <p class="text-xs text-gray-500">{{ t('tasks.form.regionHint') }}</p>
+        </div>
+      </div>
+      <div v-if="form.platform === 'mercari'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+        <Label class="sm:text-right">Mercari 提示</Label>
+        <div class="text-xs text-gray-500 sm:col-span-3">
+          <p>Mercari 任务无需登录态与账号绑定,价格单位为日元(¥ JPY)。</p>
+          <p>更精细的过滤项(都道府县、商品状态)可后续通过 platform_options 扩展。</p>
         </div>
       </div>
     </div>

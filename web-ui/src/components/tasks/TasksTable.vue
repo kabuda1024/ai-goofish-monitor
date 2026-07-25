@@ -345,10 +345,19 @@ const emit = defineEmits<{
               <div class="flex flex-col gap-1.5 py-1">
                 <div class="flex items-center gap-2">
                   <span class="text-base font-black text-slate-800 tracking-tight group-hover:text-primary transition-colors">{{ task.task_name }}</span>
-                  <Badge 
-                    variant="outline" 
+                  <Badge
+                    variant="outline"
                     :class="[
-                      'h-4 px-1.5 text-[9px] font-black border-none tracking-tighter', 
+                      'h-4 px-1.5 text-[9px] font-black border-none tracking-tighter',
+                      (task.platform || 'xianyu') === 'mercari' ? 'bg-orange-50 text-orange-600' : 'bg-cyan-50 text-cyan-600'
+                    ]"
+                  >
+                    {{ (task.platform || 'xianyu') === 'mercari' ? 'MERCARI' : 'XIANYU' }}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    :class="[
+                      'h-4 px-1.5 text-[9px] font-black border-none tracking-tighter',
                       isKeywordMode(task) ? 'bg-blue-50 text-blue-500' : 'bg-emerald-50 text-emerald-600'
                     ]"
                   >

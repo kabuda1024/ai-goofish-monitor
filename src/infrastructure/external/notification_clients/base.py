@@ -56,7 +56,14 @@ class NotificationClient(ABC):
         desktop_link = product_data.get('商品链接', '#')
         mobile_link = None
 
-        if self._pcurl_to_mobile and desktop_link and desktop_link != "#":
+        # 平台感知:仅对闲鱼(_platform=='xianyu' 或未标注/兼容旧数据)才转换手机端链接。
+        platform = str(product_data.get('_platform') or 'xianyu').lower()
+        if (
+            self._pcurl_to_mobile
+            and desktop_link
+            and desktop_link != "#"
+            and platform == "xianyu"
+        ):
             mobile_link = convert_goofish_link(desktop_link)
 
         content_lines = [

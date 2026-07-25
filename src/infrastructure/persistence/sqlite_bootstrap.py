@@ -75,6 +75,9 @@ def _import_tasks_if_needed(conn, legacy_config_file: str | None) -> None:
     for index, raw_task in enumerate(tasks):
         if not isinstance(raw_task, dict):
             continue
+        platform_options = raw_task.get("platform_options") or {}
+        if not isinstance(platform_options, dict):
+            platform_options = {}
         conn.execute(
             """
             INSERT INTO tasks (
@@ -82,8 +85,9 @@ def _import_tasks_if_needed(conn, legacy_config_file: str | None) -> None:
                 max_pages, personal_only, min_price, max_price, cron,
                 ai_prompt_base_file, ai_prompt_criteria_file, account_state_file,
                 account_strategy, free_shipping, new_publish_option, region,
-                decision_mode, keyword_rules_json, is_running
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                decision_mode, keyword_rules_json, is_running,
+                platform, platform_options_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 index,
@@ -107,6 +111,8 @@ def _import_tasks_if_needed(conn, legacy_config_file: str | None) -> None:
                 raw_task.get("decision_mode", "ai"),
                 json.dumps(raw_task.get("keyword_rules") or [], ensure_ascii=False),
                 _as_int(raw_task.get("is_running", False)),
+                raw_task.get("platform", "xianyu"),
+                json.dumps(platform_options, ensure_ascii=False),
             ),
         )
     _mark_bootstrap_completed(conn, TASKS_BOOTSTRAP_KEY)
