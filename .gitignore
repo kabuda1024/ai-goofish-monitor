@@ -11,7 +11,16 @@ src/__pycache__/
 dist/
 state/
 config.json
-prompts/
+# prompts:忽略用户运行时生成的 criteria 文件,但保留平台模板
+prompts/*
+!prompts/xianyu/
+!prompts/mercari/
+prompts/xianyu/*_criteria.txt
+!prompts/xianyu/macbook_criteria.txt
+!prompts/xianyu/base_prompt.txt
+prompts/mercari/*_criteria.txt
+!prompts/mercari/macbook_criteria.txt
+!prompts/mercari/base_prompt.txt
 .serena/
 price_history/
 data/
