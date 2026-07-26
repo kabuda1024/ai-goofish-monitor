@@ -55,6 +55,10 @@ class XianyuScraper(BasePlaywrightScraper):
     default_state_filename = STATE_FILENAME
     requires_login_state = True
 
+    # 国内站点,不需要走境外代理;显式关闭以防用户误配全局 PROXY_URL 后误走代理触发风控。
+    # 需要国内多线路轮换的用户可在任务的 proxy_rotation 中显式覆盖。
+    requires_proxy = False
+
     # ---------------- 站点钩子 ----------------
 
     def build_search_url(self, keyword: str, filters: dict) -> str:

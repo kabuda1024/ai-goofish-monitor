@@ -55,6 +55,11 @@ class MercariScraper(BasePlaywrightScraper):
     default_state_filename = None
     requires_login_state = False
 
+    # 日本站点,国内访问需走代理。
+    # 读取 MERCARI_PROXY_URL / MERCARI_PROXY_POOL / MERCARI_PROXY_ENABLED 环境变量。
+    requires_proxy = True
+    proxy_env_prefix = "MERCARI"
+
     # 保存当前页所属 URL,翻页时基于它拼 page_token 参数
     _current_search_url: Optional[str] = None
 

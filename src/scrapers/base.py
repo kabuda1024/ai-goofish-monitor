@@ -134,9 +134,27 @@ def as_int(value, default: int) -> int:
         return default
 
 
-def get_rotation_settings(task_config: dict) -> dict:
+def get_rotation_settings(
+    task_config: dict,
+    *,
+    platform_proxy_defaults: Optional[dict] = None,
+) -> dict:
+    """
+    读取账号 + 代理轮换配置。
+
+    优先级(高 → 低):
+      1. 任务配置(task_config["proxy_rotation"] / ["account_rotation"])
+      2. 平台专属默认(platform_proxy_defaults,由子类通过 requires_proxy /
+         proxy_env_prefix 声明,base.run() 组装后传入)
+      3. 全局环境变量(PROXY_ROTATION_ENABLED / PROXY_POOL 等)
+
+    平台声明"不需要代理"(requires_proxy=False)时会**硬关代理**:
+    不管全局环境变量或平台专属变量怎么设,只要任务配置也没显式打开,就直连。
+    这防止用户设了全局 PROXY_URL 之后闲鱼误走代理导致风控。
+    """
     account_cfg = task_config.get("account_rotation") or {}
     proxy_cfg = task_config.get("proxy_rotation") or {}
+    platform_defaults = platform_proxy_defaults or {}
 
     account_enabled = as_bool(
         account_cfg.get("enabled"),
@@ -157,13 +175,37 @@ def get_rotation_settings(task_config: dict) -> dict:
         as_int(os.getenv("ACCOUNT_BLACKLIST_TTL"), 300),
     )
 
-    proxy_enabled = as_bool(
-        proxy_cfg.get("enabled"), as_bool(os.getenv("PROXY_ROTATION_ENABLED"), False)
-    )
+    # ---- 代理:任务级 > 平台级 > 全局 ----
+    platform_forbids_proxy = platform_defaults.get("forbids_proxy", False)
+    platform_default_enabled = platform_defaults.get("enabled")
+    platform_default_pool = platform_defaults.get("proxy_pool", "")
+
+    if proxy_cfg.get("enabled") is not None:
+        # 任务级显式开关(True/False) 拥有最高优先级
+        proxy_enabled = as_bool(proxy_cfg.get("enabled"), False)
+    elif platform_forbids_proxy:
+        # 平台声明不用代理 → 硬关
+        proxy_enabled = False
+    elif platform_default_enabled is not None:
+        # 平台有专属默认
+        proxy_enabled = as_bool(platform_default_enabled, False)
+    else:
+        # 回退到全局环境变量
+        proxy_enabled = as_bool(os.getenv("PROXY_ROTATION_ENABLED"), False)
+
+    if platform_forbids_proxy and proxy_cfg.get("proxy_pool") is None:
+        # 平台禁用代理 + 任务也没显式给代理池 → 强制清空
+        proxy_pool = ""
+    else:
+        proxy_pool = (
+            proxy_cfg.get("proxy_pool")
+            or platform_default_pool
+            or os.getenv("PROXY_POOL", "")
+        )
+
     proxy_mode = (
         proxy_cfg.get("mode") or os.getenv("PROXY_ROTATION_MODE", "per_task")
     ).lower()
-    proxy_pool = proxy_cfg.get("proxy_pool") or os.getenv("PROXY_POOL", "")
     proxy_retry_limit = as_int(
         proxy_cfg.get("retry_limit"),
         as_int(os.getenv("PROXY_ROTATION_RETRY_LIMIT"), 2),
@@ -312,9 +354,50 @@ class BasePlaywrightScraper(abc.ABC):
     default_state_filename: Optional[str] = None
     requires_login_state: bool = True
 
+    # 代理策略
+    #   True  → 平台需要走代理(如 Mercari 日本站),会读取 {proxy_env_prefix}_PROXY_URL
+    #           / _POOL / _ENABLED 环境变量。任务级 proxy_rotation 可覆盖。
+    #   False → 平台不需要代理,即使全局 PROXY_ROTATION_ENABLED=true 也硬关。
+    #           防止国内站点(闲鱼)因误配全局代理而走境外 IP,触发风控。
+    requires_proxy: bool = False
+    #   平台专属代理环境变量前缀,如 "MERCARI" → 读 MERCARI_PROXY_URL 等。
+    #   仅当 requires_proxy=True 时生效。
+    proxy_env_prefix: str = ""
+
     def __init__(self, task_config: dict, debug_limit: int = 0):
         self.task_config = task_config
         self.debug_limit = debug_limit
+
+    def _resolve_platform_proxy_defaults(self) -> dict:
+        """
+        根据 requires_proxy / proxy_env_prefix 组装平台级代理默认值,
+        传给 get_rotation_settings。
+        """
+        if not self.requires_proxy:
+            return {"forbids_proxy": True}
+
+        prefix = (self.proxy_env_prefix or self.platform_name or "").upper()
+        if not prefix:
+            return {}
+
+        url = os.getenv(f"{prefix}_PROXY_URL", "").strip()
+        pool = os.getenv(f"{prefix}_PROXY_POOL", "").strip()
+        enabled_raw = os.getenv(f"{prefix}_PROXY_ENABLED")
+
+        # 平台代理池优先于单一 URL(RotationPool 需要逗号分隔字符串)
+        proxy_pool = pool or url
+
+        # 默认:声明 requires_proxy=True 的平台,如果配置了 URL/池,自动启用
+        if enabled_raw is not None:
+            enabled = as_bool(enabled_raw, False)
+        else:
+            enabled = bool(proxy_pool)
+
+        return {
+            "forbids_proxy": False,
+            "enabled": enabled,
+            "proxy_pool": proxy_pool,
+        }
 
     # ---------------- 子类必须实现的钩子 ----------------
 
@@ -456,7 +539,10 @@ class BasePlaywrightScraper(abc.ABC):
         """任务运行入口,处理账号 + 代理轮换 + 失败守护 + 通知。"""
         task_config = self.task_config
         keyword = task_config["keyword"]
-        rotation_settings = get_rotation_settings(task_config)
+        rotation_settings = get_rotation_settings(
+            task_config,
+            platform_proxy_defaults=self._resolve_platform_proxy_defaults(),
+        )
         account_items = load_state_files(rotation_settings["account_state_dir"])
         root_state_exists = (
             bool(self.default_state_filename)
