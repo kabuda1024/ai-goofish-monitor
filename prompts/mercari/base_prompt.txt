@@ -25,7 +25,7 @@
     "condition": { "status": "string", "comment": "string", "evidence": "string" },
     "accessories": { "status": "string", "comment": "string", "evidence": "string" },
     "history": { "status": "string", "comment": "string", "evidence": "string" },
-    "seller_profile": {
+    "seller_type": {
       "status": "string",
       "persona": "string",
       "comment": "【最重要】総合的な結論。出品者ペルソナ(個人 / 業者 / 転売ヤーなど)をまず明確化してください。FAIL 判定の場合、どの危険信号に基づき、どのロジックが破綻したかを明記してください。",
