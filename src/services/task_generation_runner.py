@@ -6,7 +6,7 @@ import os
 import aiofiles
 
 from src.domain.models.task import TaskCreate, TaskGenerateRequest
-from src.prompt_utils import generate_criteria
+from src.prompt_utils import generate_task_metadata
 from src.services.scheduler_service import SchedulerService
 from src.services.task_generation_service import TaskGenerationService
 from src.services.task_service import TaskService
@@ -26,7 +26,7 @@ PLATFORM_BASE_PROMPT_FILES = {
 
 PLATFORM_REFERENCE_CRITERIA_FILES = {
     "xianyu": "prompts/xianyu/macbook_criteria.txt",
-    "mercari": "prompts/xianyu/macbook_criteria.txt",  # Mercari 暂时复用同一份参考,后续补日语版
+    "mercari": "prompts/mercari/macbook_criteria.txt",
 }
 
 
@@ -40,14 +40,40 @@ def _resolve_base_prompt(platform: str) -> str:
 
 
 def _resolve_reference_criteria(platform: str) -> str:
+    """选一份 AI 生成 criteria 的参考文件。
+
+    按优先级回退:
+      1. 平台专属(如 prompts/mercari/macbook_criteria.txt)
+      2. 闲鱼那份(prompts/xianyu/macbook_criteria.txt)
+      3. 老版根目录(prompts/macbook_criteria.txt) —— 兼容未升级的部署
+    """
     normalized = (platform or "xianyu").lower()
-    return PLATFORM_REFERENCE_CRITERIA_FILES.get(
-        normalized, "prompts/macbook_criteria.txt"
-    )
+    candidates = [
+        PLATFORM_REFERENCE_CRITERIA_FILES.get(normalized),
+        PLATFORM_REFERENCE_CRITERIA_FILES.get("xianyu"),
+        "prompts/macbook_criteria.txt",
+    ]
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return "prompts/macbook_criteria.txt"
 
 
-def build_task_create(req: TaskGenerateRequest, criteria_file: str) -> TaskCreate:
+def build_task_create(
+    req: TaskGenerateRequest,
+    criteria_file: str,
+    *,
+    search_keywords: list[str] | None = None,
+) -> TaskCreate:
     platform = getattr(req, "platform", "xianyu") or "xianyu"
+    platform_options = dict(getattr(req, "platform_options", {}) or {})
+
+    # 把 AI 生成的关键词候选存进 platform_options,爬虫运行时会依次搜索
+    if search_keywords:
+        platform_options["search_keywords"] = [
+            kw for kw in search_keywords if kw and kw.strip()
+        ]
+
     return TaskCreate(
         task_name=req.task_name,
         enabled=True,
@@ -69,7 +95,7 @@ def build_task_create(req: TaskGenerateRequest, criteria_file: str) -> TaskCreat
         decision_mode=req.decision_mode or "ai",
         keyword_rules=req.keyword_rules,
         platform=platform,
-        platform_options=getattr(req, "platform_options", {}) or {},
+        platform_options=platform_options,
     )
 
 
@@ -108,6 +134,7 @@ async def run_ai_generation_job(
     generation_service: TaskGenerationService,
 ) -> None:
     output_filename = build_criteria_filename(req.keyword)
+    platform = getattr(req, "platform", "xianyu") or "xianyu"
     try:
         await advance_job(
             generation_service,
@@ -119,12 +146,11 @@ async def run_ai_generation_job(
         async def report_progress(step_key: str, message: str) -> None:
             await advance_job(generation_service, job_id, step_key, message)
 
-        reference_file = _resolve_reference_criteria(
-            getattr(req, "platform", "xianyu") or "xianyu"
-        )
-        generated_criteria = await generate_criteria(
+        reference_file = _resolve_reference_criteria(platform)
+        metadata = await generate_task_metadata(
             user_description=req.description or "",
             reference_file_path=reference_file,
+            platform=platform,
             progress_callback=report_progress,
         )
 
@@ -134,7 +160,27 @@ async def run_ai_generation_job(
             "persist",
             f"正在保存分析标准到 {output_filename}。",
         )
-        await save_generated_criteria(output_filename, generated_criteria)
+        await save_generated_criteria(output_filename, metadata.criteria)
+
+        # 决定最终关键词列表:优先用户手填,AI 生成的作为补充
+        final_keywords: list[str] = []
+        user_keyword = (req.keyword or "").strip()
+        if user_keyword:
+            final_keywords.append(user_keyword)
+        for kw in metadata.all_keywords:
+            if kw and kw not in final_keywords:
+                final_keywords.append(kw)
+
+        # 无论是否有多个关键词都推进这一步,保证状态机进度条完整
+        if len(final_keywords) > 1:
+            keywords_msg = (
+                f"AI 生成了 {len(final_keywords)} 个搜索关键词候选:"
+                f" {', '.join(final_keywords[:5])}"
+                + (f" 等 {len(final_keywords)} 个" if len(final_keywords) > 5 else "")
+            )
+        else:
+            keywords_msg = "使用单一关键词,无需生成候选。"
+        await advance_job(generation_service, job_id, "keywords", keywords_msg)
 
         await advance_job(
             generation_service,
@@ -142,7 +188,13 @@ async def run_ai_generation_job(
             "task",
             "分析标准已生成，正在创建任务记录。",
         )
-        task = await task_service.create_task(build_task_create(req, output_filename))
+        task = await task_service.create_task(
+            build_task_create(
+                req,
+                output_filename,
+                search_keywords=final_keywords,
+            )
+        )
         await reload_scheduler(task_service, scheduler_service)
         await generation_service.complete(job_id, task, f"任务“{req.task_name}”创建完成。")
     except Exception as exc:

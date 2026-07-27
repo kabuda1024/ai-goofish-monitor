@@ -22,6 +22,23 @@ const statusMeta = computed(() => {
   return { label: t('tasks.generation.status.queued'), variant: 'outline' as const }
 })
 
+// 从生成的任务里提取 AI 建议的关键词候选(如果有)
+const searchKeywords = computed<string[]>(() => {
+  const options = props.job.task?.platform_options as
+    | { search_keywords?: unknown }
+    | undefined
+  const raw = options?.search_keywords
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => item.length > 0)
+})
+
+const platformLabel = computed(() => {
+  const platform = props.job.task?.platform || 'xianyu'
+  return platform === 'mercari' ? 'Mercari' : '闲鱼'
+})
+
 function resolveStepDotClass(step: TaskGenerationStep) {
   if (step.status === 'completed') return 'border-emerald-500 bg-emerald-500'
   if (step.status === 'running') return 'border-amber-500 bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.18)]'
@@ -75,6 +92,34 @@ function resolveStepTextClass(step: TaskGenerationStep) {
             {{ step.message }}
           </p>
         </div>
+      </div>
+    </div>
+
+    <!-- AI 生成的搜索关键词候选(仅在任务生成完成后展示) -->
+    <div
+      v-if="job.status === 'completed' && searchKeywords.length > 0"
+      class="mt-4 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3"
+    >
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <p class="text-sm font-semibold text-blue-900">
+          🔍 {{ platformLabel }} 搜索关键词候选
+        </p>
+        <Badge variant="outline" class="text-xs">
+          {{ searchKeywords.length }} 个
+        </Badge>
+      </div>
+      <p class="text-xs text-blue-700/80 mb-2">
+        本次运行将依次搜索以下关键词(去重后合并结果)。如需调整,可到任务详情页编辑
+        <code class="bg-white px-1 rounded">platform_options.search_keywords</code>。
+      </p>
+      <div class="flex flex-wrap gap-1.5">
+        <span
+          v-for="kw in searchKeywords"
+          :key="kw"
+          class="inline-flex items-center px-2 py-0.5 rounded-md bg-white text-xs font-medium text-blue-900 border border-blue-200"
+        >
+          {{ kw }}
+        </span>
       </div>
     </div>
 

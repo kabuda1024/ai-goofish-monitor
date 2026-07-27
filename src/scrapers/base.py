@@ -533,6 +533,38 @@ class BasePlaywrightScraper(abc.ABC):
             "platform_options": self.task_config.get("platform_options") or {},
         }
 
+    def extract_search_keywords(self) -> list[str]:
+        """获取本次任务要搜索的关键词列表。
+
+        优先级:
+          1. task.platform_options.search_keywords (AI 生成或用户配置的多关键词)
+          2. task.keyword (兜底,单关键词)
+
+        返回去重后的关键词列表,主关键词(task.keyword)放最前。
+        """
+        primary = str(self.task_config.get("keyword") or "").strip()
+        platform_options = self.task_config.get("platform_options") or {}
+        extras_raw = platform_options.get("search_keywords") or []
+        if not isinstance(extras_raw, list):
+            extras_raw = []
+
+        result: list[str] = []
+        seen: set[str] = set()
+        candidates = [primary, *[str(k).strip() for k in extras_raw]]
+        for kw in candidates:
+            if not kw:
+                continue
+            key = kw.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(kw)
+
+        if not result:
+            # 极端兜底:两个都空,让上游报错
+            result = [primary]
+        return result
+
     # ---------------- 通用入口:run() ----------------
 
     async def run(self) -> int:
@@ -792,6 +824,14 @@ class BasePlaywrightScraper(abc.ABC):
         ai_prompt_text = task_config.get("ai_prompt_text", "")
         filters = self.extract_filters_from_task()
 
+        # 多关键词支持:AI 生成或用户配置的关键词候选一起搜
+        search_keywords = self.extract_search_keywords()
+        if len(search_keywords) > 1:
+            log_time(
+                f"本次任务将依次搜索 {len(search_keywords)} 个关键词: "
+                f"{', '.join(search_keywords)}"
+            )
+
         # 历史数据加载
         history_run_id = datetime.now().strftime("%Y%m%d%H%M%S")
         history_seen_item_ids: set[str] = set()
@@ -898,139 +938,163 @@ class BasePlaywrightScraper(abc.ABC):
                     )
                     await random_sleep(1, 2)
 
-                # 步骤 1:导航到搜索结果页
-                log_time("步骤 1 - 导航到搜索结果页...")
-                search_url = self.build_search_url(keyword, filters)
-                log_time(f"目标URL: {search_url}")
+                # 步骤 1:遍历所有关键词候选,依次搜索
+                for kw_index, current_keyword in enumerate(search_keywords, start=1):
+                    if stop_scraping:
+                        break
 
-                async with page.expect_response(
-                    self.is_search_api_response, timeout=30000
-                ) as initial_response_info:
-                    await page.goto(
-                        search_url, wait_until="domcontentloaded", timeout=60000
-                    )
-                if self.is_login_redirect(page.url):
-                    raise LoginRequiredError(
-                        f"Login required: redirected to {page.url}"
-                        " (cookies/state likely expired)"
-                    )
+                    if len(search_keywords) > 1:
+                        log_time(
+                            f"===== 处理关键词 {kw_index}/{len(search_keywords)}: "
+                            f"'{current_keyword}' ====="
+                        )
 
-                initial_response = await initial_response_info.value
+                    log_time("步骤 1 - 导航到搜索结果页...")
+                    search_url = self.build_search_url(current_keyword, filters)
+                    log_time(f"目标URL: {search_url}")
 
-                # 搜索落地页处理(反爬弹窗/关广告等)
-                try:
-                    await self.handle_search_landing(page)
-                except PlaywrightTimeoutError as e:
+                    async with page.expect_response(
+                        self.is_search_api_response, timeout=30000
+                    ) as initial_response_info:
+                        await page.goto(
+                            search_url, wait_until="domcontentloaded", timeout=60000
+                        )
                     if self.is_login_redirect(page.url):
                         raise LoginRequiredError(
                             f"Login required: redirected to {page.url}"
-                        ) from e
-                    raise
-
-                await random_sleep(1, 3)
-                await self.detect_search_risk_control(page)
-
-                # 步骤 2:应用筛选条件
-                log_time("步骤 2 - 应用筛选条件...")
-                final_response = await self.apply_filters(page, filters)
-
-                log_time("所有筛选已完成，开始处理商品列表...")
-
-                current_response = (
-                    final_response
-                    if final_response and final_response.ok
-                    else initial_response
-                )
-
-                for page_num in range(1, max_pages + 1):
-                    if stop_scraping:
-                        break
-                    log_time(f"开始处理第 {page_num}/{max_pages} 页 ...")
-
-                    if page_num > 1:
-                        page_advance_result = await self.advance_to_next_page(
-                            page=page,
-                            page_num=page_num,
+                            " (cookies/state likely expired)"
                         )
-                        if not page_advance_result.advanced:
-                            break
-                        current_response = page_advance_result.response
 
-                    if not (current_response and current_response.ok):
-                        log_time(f"第 {page_num} 页响应无效，跳过。")
-                        continue
+                    initial_response = await initial_response_info.value
 
-                    basic_items = await self.parse_search_json(
-                        await current_response.json(), f"第 {page_num} 页"
-                    )
-                    if not basic_items:
-                        break
-                    historical_snapshots.extend(
-                        record_market_snapshots(
-                            keyword=keyword,
-                            task_name=task_config.get(
-                                "task_name", "Untitled Task"
-                            ),
-                            items=basic_items,
-                            run_id=history_run_id,
-                            snapshot_time=datetime.now().isoformat(),
-                            seen_item_ids=history_seen_item_ids,
-                        )
+                    # 搜索落地页处理(反爬弹窗/关广告等)
+                    try:
+                        await self.handle_search_landing(page)
+                    except PlaywrightTimeoutError as e:
+                        if self.is_login_redirect(page.url):
+                            raise LoginRequiredError(
+                                f"Login required: redirected to {page.url}"
+                            ) from e
+                        raise
+
+                    await random_sleep(1, 3)
+                    await self.detect_search_risk_control(page)
+
+                    # 步骤 2:应用筛选条件(闲鱼在 UI 上点,Mercari 已通过 URL 完成)
+                    log_time("步骤 2 - 应用筛选条件...")
+                    final_response = await self.apply_filters(page, filters)
+
+                    log_time("所有筛选已完成，开始处理商品列表...")
+
+                    current_response = (
+                        final_response
+                        if final_response and final_response.ok
+                        else initial_response
                     )
 
-                    total_items_on_page = len(basic_items)
-                    for i, item_data in enumerate(basic_items, 1):
-                        if self.debug_limit > 0 and processed_item_count >= self.debug_limit:
-                            log_time(
-                                f"已达到调试上限 ({self.debug_limit})，停止获取新商品。"
-                            )
-                            stop_scraping = True
+                    for page_num in range(1, max_pages + 1):
+                        if stop_scraping:
                             break
+                        log_time(
+                            f"开始处理关键词 '{current_keyword}' "
+                            f"第 {page_num}/{max_pages} 页 ..."
+                        )
 
-                        unique_key = get_link_unique_key(item_data["商品链接"])
-                        if unique_key in processed_links:
-                            log_time(
-                                f"[页内进度 {i}/{total_items_on_page}] 商品 "
-                                f"'{item_data['商品标题'][:20]}...' 已存在，跳过。"
+                        if page_num > 1:
+                            page_advance_result = await self.advance_to_next_page(
+                                page=page,
+                                page_num=page_num,
                             )
+                            if not page_advance_result.advanced:
+                                break
+                            current_response = page_advance_result.response
+
+                        if not (current_response and current_response.ok):
+                            log_time(f"第 {page_num} 页响应无效，跳过。")
                             continue
 
+                        basic_items = await self.parse_search_json(
+                            await current_response.json(), f"第 {page_num} 页"
+                        )
+                        if not basic_items:
+                            break
+                        historical_snapshots.extend(
+                            record_market_snapshots(
+                                keyword=keyword,
+                                task_name=task_config.get(
+                                    "task_name", "Untitled Task"
+                                ),
+                                items=basic_items,
+                                run_id=history_run_id,
+                                snapshot_time=datetime.now().isoformat(),
+                                seen_item_ids=history_seen_item_ids,
+                            )
+                        )
+
+                        total_items_on_page = len(basic_items)
+                        for i, item_data in enumerate(basic_items, 1):
+                            if self.debug_limit > 0 and processed_item_count >= self.debug_limit:
+                                log_time(
+                                    f"已达到调试上限 ({self.debug_limit})，停止获取新商品。"
+                                )
+                                stop_scraping = True
+                                break
+
+                            unique_key = get_link_unique_key(item_data["商品链接"])
+                            if unique_key in processed_links:
+                                log_time(
+                                    f"[页内进度 {i}/{total_items_on_page}] 商品 "
+                                    f"'{item_data['商品标题'][:20]}...' 已存在，跳过。"
+                                )
+                                continue
+
+                            log_time(
+                                f"[页内进度 {i}/{total_items_on_page}] 发现新商品，"
+                                f"获取详情: {item_data['商品标题'][:30]}..."
+                            )
+                            await random_sleep(2, 4)
+
+                            processed = await self._process_item_detail(
+                                context=context,
+                                item_data=item_data,
+                                keyword=keyword,
+                                basic_items=basic_items,
+                                historical_snapshots=historical_snapshots,
+                                decision_mode=decision_mode,
+                                analyze_images=analyze_images,
+                                ai_prompt_text=ai_prompt_text,
+                                keyword_rules=keyword_rules,
+                                analysis_dispatcher=analysis_dispatcher,
+                            )
+                            if processed:
+                                processed_links.add(unique_key)
+                                processed_item_count += 1
+                                log_time(
+                                    f"商品已提交后台分析。累计处理 "
+                                    f"{processed_item_count} 个新商品。"
+                                )
+                                log_time(
+                                    "[反爬] 执行一次主要的随机延迟以模拟用户浏览间隔..."
+                                )
+                                await random_sleep(5, 10)
+
+                        if not stop_scraping and page_num < max_pages:
+                            print(
+                                f"--- 第 {page_num} 页处理完毕，准备翻页。"
+                                "执行一次页面间的长时休息... ---"
+                            )
+                            await random_sleep(10, 15)
+
+                    # 关键词之间的额外休息(如果还有下一个关键词)
+                    if (
+                        not stop_scraping
+                        and kw_index < len(search_keywords)
+                    ):
                         log_time(
-                            f"[页内进度 {i}/{total_items_on_page}] 发现新商品，"
-                            f"获取详情: {item_data['商品标题'][:30]}..."
+                            f"--- 关键词 '{current_keyword}' 处理完毕，"
+                            "准备切换下一个关键词，休息 15~25 秒 ---"
                         )
-                        await random_sleep(2, 4)
-
-                        processed = await self._process_item_detail(
-                            context=context,
-                            item_data=item_data,
-                            keyword=keyword,
-                            basic_items=basic_items,
-                            historical_snapshots=historical_snapshots,
-                            decision_mode=decision_mode,
-                            analyze_images=analyze_images,
-                            ai_prompt_text=ai_prompt_text,
-                            keyword_rules=keyword_rules,
-                            analysis_dispatcher=analysis_dispatcher,
-                        )
-                        if processed:
-                            processed_links.add(unique_key)
-                            processed_item_count += 1
-                            log_time(
-                                f"商品已提交后台分析。累计处理 "
-                                f"{processed_item_count} 个新商品。"
-                            )
-                            log_time(
-                                "[反爬] 执行一次主要的随机延迟以模拟用户浏览间隔..."
-                            )
-                            await random_sleep(5, 10)
-
-                    if not stop_scraping and page_num < max_pages:
-                        print(
-                            f"--- 第 {page_num} 页处理完毕，准备翻页。"
-                            "执行一次页面间的长时休息... ---"
-                        )
-                        await random_sleep(10, 15)
+                        await random_sleep(15, 25)
 
             except PlaywrightTimeoutError as e:
                 if self.is_login_redirect(page.url):
