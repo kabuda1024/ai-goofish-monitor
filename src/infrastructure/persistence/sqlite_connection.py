@@ -45,7 +45,8 @@ SCHEMA_STATEMENTS = (
         keyword_rules_json TEXT NOT NULL,
         is_running INTEGER NOT NULL,
         platform TEXT NOT NULL DEFAULT 'xianyu',
-        platform_options_json TEXT NOT NULL DEFAULT '{}'
+        platform_options_json TEXT NOT NULL DEFAULT '{}',
+        auto_keywords INTEGER NOT NULL DEFAULT 0
     )
     """,
     """
@@ -146,6 +147,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
         conn.execute(statement)
     _migrate_result_items_status(conn)
     _migrate_tasks_platform(conn)
+    _migrate_tasks_auto_keywords(conn)
     conn.commit()
 
 
@@ -188,6 +190,23 @@ def _migrate_tasks_platform(conn: sqlite3.Connection) -> None:
         )
     conn.execute(
         "INSERT OR REPLACE INTO app_metadata(key, value) VALUES ('migration:tasks_platform', 'done')"
+    )
+
+
+def _migrate_tasks_auto_keywords(conn: sqlite3.Connection) -> None:
+    """为 tasks 表添加 auto_keywords 列(仅执行一次)。"""
+    row = conn.execute(
+        "SELECT value FROM app_metadata WHERE key = 'migration:tasks_auto_keywords'"
+    ).fetchone()
+    if row is not None:
+        return
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+    if "auto_keywords" not in cols:
+        conn.execute(
+            "ALTER TABLE tasks ADD COLUMN auto_keywords INTEGER NOT NULL DEFAULT 0"
+        )
+    conn.execute(
+        "INSERT OR REPLACE INTO app_metadata(key, value) VALUES ('migration:tasks_auto_keywords', 'done')"
     )
 
 

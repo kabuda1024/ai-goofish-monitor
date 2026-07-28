@@ -86,10 +86,23 @@ def test_generate_ai_task_returns_job_and_completes_async(api_client, api_contex
         "personal_only": True,
     }
 
+    async def fake_generate_task_metadata(*_args, **_kwargs):
+        from src.prompt_utils import TaskMetadata
+        await asyncio.sleep(0.05)
+        return TaskMetadata(
+            criteria="[V6.3 核心升级]\\nApple Watch criteria",
+            primary_keyword="Apple Watch S10",
+            alternative_keywords=["Apple Watch Series 10"],
+        )
+
     async def fake_generate_criteria(*_args, **_kwargs):
         await asyncio.sleep(0.05)
         return "[V6.3 核心升级]\\nApple Watch criteria"
 
+    monkeypatch.setattr(
+        "src.services.task_generation_runner.generate_task_metadata",
+        fake_generate_task_metadata,
+    )
     monkeypatch.setattr(
         "src.services.task_generation_runner.generate_criteria",
         fake_generate_criteria,

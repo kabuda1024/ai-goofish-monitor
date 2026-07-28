@@ -86,8 +86,8 @@ def _import_tasks_if_needed(conn, legacy_config_file: str | None) -> None:
                 ai_prompt_base_file, ai_prompt_criteria_file, account_state_file,
                 account_strategy, free_shipping, new_publish_option, region,
                 decision_mode, keyword_rules_json, is_running,
-                platform, platform_options_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                platform, platform_options_json, auto_keywords
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 index,
@@ -113,6 +113,7 @@ def _import_tasks_if_needed(conn, legacy_config_file: str | None) -> None:
                 _as_int(raw_task.get("is_running", False)),
                 raw_task.get("platform", "xianyu"),
                 json.dumps(platform_options, ensure_ascii=False),
+                _as_int(raw_task.get("auto_keywords", False)),
             ),
         )
     _mark_bootstrap_completed(conn, TASKS_BOOTSTRAP_KEY)

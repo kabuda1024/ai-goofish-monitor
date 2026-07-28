@@ -115,6 +115,7 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
       decision_mode: defaultValues.decision_mode || props.initialData.decision_mode || 'ai',
       platform: defaultValues.platform || props.initialData.platform || 'xianyu',
       platform_options: defaultValues.platform_options || props.initialData.platform_options || {},
+      auto_keywords: defaultValues.auto_keywords ?? props.initialData.auto_keywords ?? false,
     }
     keywordRulesInput.value = (defaultValues.keyword_rules || props.initialData.keyword_rules || []).join('\n')
     // 编辑模式下，根据 cron 值判断模式
@@ -139,6 +140,7 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
       decision_mode: 'ai',
       platform: 'xianyu',
       platform_options: {},
+      auto_keywords: false,
       ...defaultValues,
     }
     if (!form.value.account_strategy) {
@@ -340,6 +342,16 @@ function handleSubmit() {
           <Switch id="analyze-images" v-model="form.analyze_images" />
           <p class="text-xs text-gray-500">
             {{ t('tasks.form.analyzeImagesHint') }}
+          </p>
+        </div>
+      </div>
+      <div v-if="form.decision_mode === 'ai'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+        <Label for="auto-keywords" class="sm:text-right">AI 关键词扩展</Label>
+        <div class="space-y-1 sm:col-span-3">
+          <Switch id="auto-keywords" v-model="form.auto_keywords" />
+          <p class="text-xs text-gray-500">
+            开启后,AI 会根据你的描述额外生成 3~6 个搜索关键词候选,每个都会独立搜索(去重合并结果)。<br>
+            关闭时,只搜索你手动填写的关键词(保持简单直接)。
           </p>
         </div>
       </div>

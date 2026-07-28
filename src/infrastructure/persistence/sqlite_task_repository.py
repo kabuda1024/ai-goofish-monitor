@@ -28,6 +28,7 @@ def _row_to_task(row) -> Task:
     except (ValueError, TypeError):
         parsed_options = {}
     payload["platform_options"] = parsed_options if isinstance(parsed_options, dict) else {}
+    payload["auto_keywords"] = bool(payload.get("auto_keywords") or 0)
     return Task(**payload)
 
 
@@ -100,14 +101,14 @@ class SqliteTaskRepository(TaskRepository):
                     ai_prompt_base_file, ai_prompt_criteria_file, account_state_file,
                     account_strategy, free_shipping, new_publish_option, region,
                     decision_mode, keyword_rules_json, is_running,
-                    platform, platform_options_json
+                    platform, platform_options_json, auto_keywords
                 ) VALUES (
                     :id, :task_name, :enabled, :keyword, :description, :analyze_images,
                     :max_pages, :personal_only, :min_price, :max_price, :cron,
                     :ai_prompt_base_file, :ai_prompt_criteria_file, :account_state_file,
                     :account_strategy, :free_shipping, :new_publish_option, :region,
                     :decision_mode, :keyword_rules_json, :is_running,
-                    :platform, :platform_options_json
+                    :platform, :platform_options_json, :auto_keywords
                 )
                 """,
                 payload,
@@ -139,6 +140,7 @@ class SqliteTaskRepository(TaskRepository):
         values["keyword_rules_json"] = json.dumps(task.keyword_rules or [], ensure_ascii=False)
         values["platform"] = task.platform or "xianyu"
         values["platform_options_json"] = json.dumps(task.platform_options or {}, ensure_ascii=False)
+        values["auto_keywords"] = int(bool(task.auto_keywords))
         values.pop("keyword_rules", None)
         values.pop("platform_options", None)
         return values

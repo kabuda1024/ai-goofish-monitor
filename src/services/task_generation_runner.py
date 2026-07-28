@@ -6,7 +6,7 @@ import os
 import aiofiles
 
 from src.domain.models.task import TaskCreate, TaskGenerateRequest
-from src.prompt_utils import generate_task_metadata
+from src.prompt_utils import generate_criteria, generate_task_metadata
 from src.services.scheduler_service import SchedulerService
 from src.services.task_generation_service import TaskGenerationService
 from src.services.task_service import TaskService
@@ -96,6 +96,7 @@ def build_task_create(
         keyword_rules=req.keyword_rules,
         platform=platform,
         platform_options=platform_options,
+        auto_keywords=bool(getattr(req, "auto_keywords", False)),
     )
 
 
@@ -135,6 +136,7 @@ async def run_ai_generation_job(
 ) -> None:
     output_filename = build_criteria_filename(req.keyword)
     platform = getattr(req, "platform", "xianyu") or "xianyu"
+    auto_keywords_enabled = bool(getattr(req, "auto_keywords", False))
     try:
         await advance_job(
             generation_service,
@@ -147,12 +149,25 @@ async def run_ai_generation_job(
             await advance_job(generation_service, job_id, step_key, message)
 
         reference_file = _resolve_reference_criteria(platform)
-        metadata = await generate_task_metadata(
-            user_description=req.description or "",
-            reference_file_path=reference_file,
-            platform=platform,
-            progress_callback=report_progress,
-        )
+
+        if auto_keywords_enabled:
+            # 用户勾选了 AI 自动生成关键词:同时生成 criteria + keywords
+            metadata = await generate_task_metadata(
+                user_description=req.description or "",
+                reference_file_path=reference_file,
+                platform=platform,
+                progress_callback=report_progress,
+            )
+            criteria_text = metadata.criteria
+            ai_keywords = metadata.all_keywords
+        else:
+            # 传统模式:只生成 criteria,不扩展关键词
+            criteria_text = await generate_criteria(
+                user_description=req.description or "",
+                reference_file_path=reference_file,
+                progress_callback=report_progress,
+            )
+            ai_keywords = []
 
         await advance_job(
             generation_service,
@@ -160,26 +175,33 @@ async def run_ai_generation_job(
             "persist",
             f"正在保存分析标准到 {output_filename}。",
         )
-        await save_generated_criteria(output_filename, metadata.criteria)
+        await save_generated_criteria(output_filename, criteria_text)
 
-        # 决定最终关键词列表:优先用户手填,AI 生成的作为补充
+        # 决定最终关键词列表:主关键词永远是用户手填的,AI 生成的作为补充
         final_keywords: list[str] = []
         user_keyword = (req.keyword or "").strip()
         if user_keyword:
             final_keywords.append(user_keyword)
-        for kw in metadata.all_keywords:
-            if kw and kw not in final_keywords:
-                final_keywords.append(kw)
+        if auto_keywords_enabled:
+            for kw in ai_keywords:
+                if kw and kw not in final_keywords:
+                    final_keywords.append(kw)
 
-        # 无论是否有多个关键词都推进这一步,保证状态机进度条完整
-        if len(final_keywords) > 1:
-            keywords_msg = (
-                f"AI 生成了 {len(final_keywords)} 个搜索关键词候选:"
-                f" {', '.join(final_keywords[:5])}"
-                + (f" 等 {len(final_keywords)} 个" if len(final_keywords) > 5 else "")
-            )
+        if auto_keywords_enabled:
+            if len(final_keywords) > 1:
+                keywords_msg = (
+                    f"AI 生成了 {len(final_keywords)} 个搜索关键词候选:"
+                    f" {', '.join(final_keywords[:5])}"
+                    + (
+                        f" 等 {len(final_keywords)} 个"
+                        if len(final_keywords) > 5
+                        else ""
+                    )
+                )
+            else:
+                keywords_msg = "AI 未生成额外候选,将只搜索主关键词。"
         else:
-            keywords_msg = "使用单一关键词,无需生成候选。"
+            keywords_msg = "未启用 AI 关键词扩展,将只搜索用户填写的关键词。"
         await advance_job(generation_service, job_id, "keywords", keywords_msg)
 
         await advance_job(
@@ -188,11 +210,13 @@ async def run_ai_generation_job(
             "task",
             "分析标准已生成，正在创建任务记录。",
         )
+        # 只有 auto_keywords 开启时才把 keywords 存进 platform_options
+        keywords_to_store = final_keywords if auto_keywords_enabled else None
         task = await task_service.create_task(
             build_task_create(
                 req,
                 output_filename,
-                search_keywords=final_keywords,
+                search_keywords=keywords_to_store,
             )
         )
         await reload_scheduler(task_service, scheduler_service)

@@ -147,6 +147,7 @@ class Task(BaseModel):
     is_running: bool = False
     platform: Literal["xianyu", "mercari"] = "xianyu"
     platform_options: Dict[str, Any] = Field(default_factory=dict)
+    auto_keywords: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -203,6 +204,7 @@ class TaskCreate(BaseModel):
     keyword_rules: List[str] = Field(default_factory=list)
     platform: Literal["xianyu", "mercari"] = "xianyu"
     platform_options: Dict[str, Any] = Field(default_factory=dict)
+    auto_keywords: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -278,6 +280,7 @@ class TaskUpdate(BaseModel):
     is_running: Optional[bool] = None
     platform: Optional[Literal["xianyu", "mercari"]] = None
     platform_options: Optional[Dict[str, Any]] = None
+    auto_keywords: Optional[bool] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -350,6 +353,7 @@ class TaskGenerateRequest(BaseModel):
     keyword_rules: List[str] = Field(default_factory=list)
     platform: Literal["xianyu", "mercari"] = "xianyu"
     platform_options: Dict[str, Any] = Field(default_factory=dict)
+    auto_keywords: bool = False
 
     @model_validator(mode="before")
     @classmethod

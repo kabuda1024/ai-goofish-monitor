@@ -29,6 +29,7 @@ export interface Task {
   is_running: boolean;
   platform?: Platform;
   platform_options?: PlatformOptions;
+  auto_keywords?: boolean;
 }
 
 export type TaskGenerationStatus = 'queued' | 'running' | 'completed' | 'failed';
@@ -81,4 +82,5 @@ export interface TaskGenerateRequest {
   keyword_rules?: string[];
   platform?: Platform;
   platform_options?: PlatformOptions;
+  auto_keywords?: boolean;
 }
