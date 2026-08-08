@@ -349,10 +349,13 @@ const emit = defineEmits<{
                     variant="outline"
                     :class="[
                       'h-4 px-1.5 text-[9px] font-black border-none tracking-tighter',
-                      (task.platform || 'xianyu') === 'mercari' ? 'bg-orange-50 text-orange-600' : 'bg-cyan-50 text-cyan-600'
+                      (task.platform || 'xianyu') === 'mercari' ? 'bg-orange-50 text-orange-600' :
+                      (task.platform || 'xianyu') === 'hoyoyo' ? 'bg-fuchsia-50 text-fuchsia-600' :
+                      'bg-cyan-50 text-cyan-600'
                     ]"
                   >
-                    {{ (task.platform || 'xianyu') === 'mercari' ? 'MERCARI' : 'XIANYU' }}
+                    {{ (task.platform || 'xianyu') === 'mercari' ? 'MERCARI' :
+                       (task.platform || 'xianyu') === 'hoyoyo' ? 'HOYOYO' : 'XIANYU' }}
                   </Badge>
                   <Badge
                     variant="outline"

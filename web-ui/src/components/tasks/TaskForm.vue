@@ -229,8 +229,8 @@ function handleSubmit() {
   const { id, is_running, next_run_at, ...submitData } = form.value as any
   const platform = submitData.platform || 'xianyu'
   const currentAccountStrategy = accountStrategy.value || 'auto'
-  if (platform === 'mercari') {
-    // Mercari 不需要登录态/账号
+  if (platform === 'mercari' || platform === 'hoyoyo') {
+    // Mercari/Hoyoyo 不需要登录态/账号
     submitData.account_state_file = null
     submitData.account_strategy = 'auto'
     submitData.personal_only = false
@@ -253,7 +253,7 @@ function handleSubmit() {
     submitData.account_strategy = currentAccountStrategy
   }
 
-  if (platform !== 'mercari' && typeof submitData.region === 'string') {
+  if (platform === 'xianyu' && typeof submitData.region === 'string') {
     const normalized = submitData.region
       .trim()
       .split('/')
@@ -294,10 +294,11 @@ function handleSubmit() {
             <SelectContent>
               <SelectItem value="xianyu">闲鱼 (Goofish)</SelectItem>
               <SelectItem value="mercari">Mercari (日本)</SelectItem>
+              <SelectItem value="hoyoyo">Hoyoyo (日购聚合)</SelectItem>
             </SelectContent>
           </Select>
           <p class="text-xs text-gray-500 mt-1">
-            切换平台会调整下方可用的过滤项;闲鱼需要登录态,Mercari 则不需要。
+            切换平台会调整下方可用的过滤项;闲鱼需要登录态,Mercari/Hoyoyo 则不需要。
           </p>
         </div>
       </div>
@@ -418,7 +419,7 @@ function handleSubmit() {
           </Tabs>
         </div>
       </div>
-      <div v-if="form.platform !== 'mercari'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div v-if="form.platform === 'xianyu'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label class="sm:text-right">{{ t('tasks.form.accountStrategyLabel') }}</Label>
         <div class="space-y-2 sm:col-span-3">
           <select
@@ -435,7 +436,7 @@ function handleSubmit() {
           </p>
         </div>
       </div>
-      <div v-if="form.platform !== 'mercari' && accountStrategy === 'fixed'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div v-if="form.platform === 'xianyu' && accountStrategy === 'fixed'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label class="sm:text-right">{{ t('tasks.form.fixedAccount') }}</Label>
         <div class="sm:col-span-3">
           <select
@@ -450,7 +451,7 @@ function handleSubmit() {
           </select>
         </div>
       </div>
-      <div v-if="form.platform !== 'mercari'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div v-if="form.platform === 'xianyu'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label for="personal-only" class="sm:text-right">{{ t('tasks.form.personalOnly') }}</Label>
         <div class="sm:col-span-3">
           <Switch id="personal-only" v-model="form.personal_only" />
@@ -462,7 +463,7 @@ function handleSubmit() {
           <Switch id="free-shipping" v-model="form.free_shipping" />
         </div>
       </div>
-      <div v-if="form.platform !== 'mercari'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div v-if="form.platform === 'xianyu'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label class="sm:text-right">{{ t('tasks.form.newPublish') }}</Label>
         <div class="sm:col-span-3">
           <Select v-model="form.new_publish_option as any">
@@ -480,7 +481,7 @@ function handleSubmit() {
           </Select>
         </div>
       </div>
-      <div v-if="form.platform !== 'mercari'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div v-if="form.platform === 'xianyu'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label class="sm:text-right">{{ t('tasks.form.region') }}</Label>
         <div class="space-y-1 sm:col-span-3">
           <TaskRegionSelector v-model="form.region as any" />
@@ -492,6 +493,26 @@ function handleSubmit() {
         <div class="text-xs text-gray-500 sm:col-span-3">
           <p>Mercari 任务无需登录态与账号绑定,价格单位为日元(¥ JPY)。</p>
           <p>更精细的过滤项(都道府县、商品状态)可后续通过 platform_options 扩展。</p>
+        </div>
+      </div>
+      <div v-if="form.platform === 'hoyoyo'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+        <Label class="sm:text-right">排序方式</Label>
+        <div class="space-y-1 sm:col-span-3">
+          <Select v-model="form.platform_options.sort">
+            <SelectTrigger>
+              <SelectValue placeholder="综合排序" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="-score">综合排序</SelectItem>
+              <SelectItem value="time">最新发布</SelectItem>
+              <SelectItem value="price">价格从低到高</SelectItem>
+              <SelectItem value="-price">价格从高到低</SelectItem>
+            </SelectContent>
+          </Select>
+          <p class="text-xs text-gray-500">
+            Hoyoyo 聚合了 Yahoo拍卖/Mercari/雅虎购物,无需登录态,仅使用搜索列表信息;
+            部分来源(Mercari/雅虎购物)缺失发布时间与卖家信息。
+          </p>
         </div>
       </div>
     </div>

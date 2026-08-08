@@ -5,6 +5,7 @@ import pytest
 
 from src.scrapers import get_scraper_class
 from src.scrapers.base import BasePlaywrightScraper
+from src.scrapers.hoyoyo.scraper import HoyoyoScraper
 from src.scrapers.mercari.scraper import MercariScraper
 from src.scrapers.xianyu.scraper import XianyuScraper
 
@@ -28,6 +29,15 @@ def test_get_scraper_class_dispatches_mercari():
     assert cls.platform_name == "mercari"
 
 
+def test_get_scraper_class_dispatches_hoyoyo():
+    cls = get_scraper_class("hoyoyo")
+    assert cls is HoyoyoScraper
+    assert cls.platform_name == "hoyoyo"
+    # 有意的架构差异: hoyoyo 是无登录态的轻量 httpx 爬虫,不继承
+    # BasePlaywrightScraper(那套是为浏览器自动化的账号/代理轮换设计的)。
+    assert not issubclass(cls, BasePlaywrightScraper)
+
+
 def test_get_scraper_class_falls_back_on_unknown_platform():
     cls = get_scraper_class("unknown_platform_xyz")
     assert cls is XianyuScraper
@@ -36,6 +46,7 @@ def test_get_scraper_class_falls_back_on_unknown_platform():
 def test_platform_is_case_insensitive():
     assert get_scraper_class("MERCARI") is MercariScraper
     assert get_scraper_class("Xianyu") is XianyuScraper
+    assert get_scraper_class("HOYOYO") is HoyoyoScraper
 
 
 def test_xianyu_scraper_config_defaults():
@@ -57,8 +68,10 @@ def test_scrapers_can_be_instantiated():
     task_config = {"task_name": "t", "keyword": "k", "max_pages": 1}
     xy = XianyuScraper(task_config)
     mc = MercariScraper(task_config)
+    hy = HoyoyoScraper(task_config)
     assert xy.platform_name == "xianyu"
     assert mc.platform_name == "mercari"
+    assert hy.platform_name == "hoyoyo"
 
 
 def test_base_class_is_abstract():

@@ -1,4 +1,4 @@
-from src.domain.models.task import Task, TaskGenerateRequest, TaskUpdate
+from src.domain.models.task import Task, TaskCreate, TaskGenerateRequest, TaskUpdate
 
 
 def test_task_can_start_and_stop():
@@ -107,6 +107,41 @@ def test_generate_request_infers_fixed_account_strategy_from_state_file():
     )
 
     assert req.account_strategy == "fixed"
+
+
+def test_task_accepts_hoyoyo_platform():
+    task = Task(
+        id=1,
+        task_name="Hoyoyo MacBook",
+        enabled=True,
+        keyword="macbook",
+        description="body",
+        max_pages=2,
+        personal_only=False,
+        min_price=None,
+        max_price=None,
+        cron=None,
+        ai_prompt_base_file="prompts/mercari/base_prompt.txt",
+        ai_prompt_criteria_file="prompts/mercari/macbook_criteria.txt",
+        platform="hoyoyo",
+        is_running=False,
+    )
+    assert task.platform == "hoyoyo"
+
+
+def test_task_create_and_update_accept_hoyoyo_platform():
+    create = TaskCreate(task_name="t", keyword="k", description="d", platform="hoyoyo")
+    assert create.platform == "hoyoyo"
+
+    update = TaskUpdate(platform="hoyoyo")
+    assert update.platform == "hoyoyo"
+
+
+def test_generate_request_accepts_hoyoyo_platform():
+    req = TaskGenerateRequest(
+        task_name="t", keyword="macbook", description="d", platform="hoyoyo",
+    )
+    assert req.platform == "hoyoyo"
 
 
 def test_generate_request_requires_state_file_for_fixed_account_strategy():

@@ -1,6 +1,6 @@
 // Based on the Pydantic model in the backend
 
-export type Platform = 'xianyu' | 'mercari';
+export type Platform = 'xianyu' | 'mercari' | 'hoyoyo';
 
 export type PlatformOptions = Record<string, unknown>;
 

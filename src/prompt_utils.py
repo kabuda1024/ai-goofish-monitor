@@ -83,6 +83,15 @@ PLATFORM_KEYWORD_HINTS = {
         ),
         "language": "日语(或英日混合)",
     },
+    "hoyoyo": {
+        "label": "Hoyoyo(日购聚合站,覆盖Yahoo拍卖/Mercari/雅虎购物)",
+        "hint": (
+            "- 聚合多个日本站点,搜索逻辑与各站点类似,优先用日文/型号关键词\n"
+            "- 词太多会因 AND 逻辑导致 0 命中,建议 2~4 个词\n"
+            "- 例:iMac M1、MacBook Air M2、α7 IV、ニンテンドースイッチ"
+        ),
+        "language": "日语(或英日混合)",
+    },
 }
 
 

@@ -22,11 +22,15 @@ def build_criteria_filename(keyword: str) -> str:
 PLATFORM_BASE_PROMPT_FILES = {
     "xianyu": "prompts/xianyu/base_prompt.txt",
     "mercari": "prompts/mercari/base_prompt.txt",
+    # hoyoyo 暂无专属模板:同为 JPY 定价/日本站点,先复用 Mercari 模板,
+    # 待实际跑起来效果不理想再单独写 prompts/hoyoyo/。
+    "hoyoyo": "prompts/mercari/base_prompt.txt",
 }
 
 PLATFORM_REFERENCE_CRITERIA_FILES = {
     "xianyu": "prompts/xianyu/macbook_criteria.txt",
     "mercari": "prompts/mercari/macbook_criteria.txt",
+    "hoyoyo": "prompts/mercari/macbook_criteria.txt",
 }
 
 

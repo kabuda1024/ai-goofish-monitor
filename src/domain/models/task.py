@@ -145,7 +145,7 @@ class Task(BaseModel):
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
     is_running: bool = False
-    platform: Literal["xianyu", "mercari"] = "xianyu"
+    platform: Literal["xianyu", "mercari", "hoyoyo"] = "xianyu"
     platform_options: Dict[str, Any] = Field(default_factory=dict)
     auto_keywords: bool = False
 
@@ -202,7 +202,7 @@ class TaskCreate(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
-    platform: Literal["xianyu", "mercari"] = "xianyu"
+    platform: Literal["xianyu", "mercari", "hoyoyo"] = "xianyu"
     platform_options: Dict[str, Any] = Field(default_factory=dict)
     auto_keywords: bool = False
 
@@ -278,7 +278,7 @@ class TaskUpdate(BaseModel):
     decision_mode: Optional[Literal["ai", "keyword"]] = None
     keyword_rules: Optional[List[str]] = None
     is_running: Optional[bool] = None
-    platform: Optional[Literal["xianyu", "mercari"]] = None
+    platform: Optional[Literal["xianyu", "mercari", "hoyoyo"]] = None
     platform_options: Optional[Dict[str, Any]] = None
     auto_keywords: Optional[bool] = None
 
@@ -351,7 +351,7 @@ class TaskGenerateRequest(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
-    platform: Literal["xianyu", "mercari"] = "xianyu"
+    platform: Literal["xianyu", "mercari", "hoyoyo"] = "xianyu"
     platform_options: Dict[str, Any] = Field(default_factory=dict)
     auto_keywords: bool = False
 

@@ -36,7 +36,9 @@ const searchKeywords = computed<string[]>(() => {
 
 const platformLabel = computed(() => {
   const platform = props.job.task?.platform || 'xianyu'
-  return platform === 'mercari' ? 'Mercari' : '闲鱼'
+  if (platform === 'mercari') return 'Mercari'
+  if (platform === 'hoyoyo') return 'Hoyoyo'
+  return '闲鱼'
 })
 
 function resolveStepDotClass(step: TaskGenerationStep) {

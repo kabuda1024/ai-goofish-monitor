@@ -1,0 +1,33 @@
+# 本地开发/自建镜像用的 compose 文件。
+# 与 docker-compose.yaml 的差别:image 改为 build (从当前目录 Dockerfile 构建),
+# 使用本地代码而不是拉取上游 ghcr.io/usagi-org/ai-goofish:latest 镜像。
+#
+# 用法:
+#   docker compose -f docker-compose.local.yaml up --build -d
+#   docker compose -f docker-compose.local.yaml logs -f app
+#   docker compose -f docker-compose.local.yaml down
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-goofish-monitor-app
+    init: true
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      APP_DATABASE_FILE: /app/data/app.sqlite3
+    volumes:
+      - ./.env:/app/.env
+      - ./data:/app/data
+      - ./state:/app/state
+      - ./config.json:/app/config.json
+      - ./prompts:/app/prompts
+      - ./jsonl:/app/jsonl
+      - ./logs:/app/logs
+      - ./images:/app/images
+      - ./price_history:/app/price_history
+    restart: unless-stopped
