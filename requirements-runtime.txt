@@ -10,6 +10,7 @@ aiofiles
 python-socks
 apscheduler
 httpx[socks]
+beautifulsoup4
 Pillow
 pyzbar
 qrcode
