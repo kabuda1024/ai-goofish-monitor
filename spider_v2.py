@@ -91,17 +91,6 @@ async def main():
                     return True
         return False
 
-    if not os.path.exists(STATE_FILE) and not has_bound_account(tasks_config) and not has_any_state_file():
-        # 只有当至少存在一个需要登录态的平台任务(默认为闲鱼)时才拦截。
-        needs_login = any(
-            (task.get("platform") or "xianyu").lower() == "xianyu"
-            for task in tasks_config
-        )
-        if needs_login:
-            sys.exit(
-                f"错误: 未找到登录状态文件。请在 state/ 中添加账号或配置 account_state_file。"
-            )
-
     # 读取所有prompt文件内容（关键词模式不需要加载prompt）
     for task in tasks_config:
         decision_mode = str(task.get("decision_mode", "ai")).strip().lower()
@@ -182,6 +171,17 @@ async def main():
     if not active_task_configs:
         print("没有需要执行的任务，程序退出。")
         return
+
+    if not os.path.exists(STATE_FILE) and not has_bound_account(active_task_configs) and not has_any_state_file():
+        # 只有当本次实际要执行的任务里，至少存在一个需要登录态的平台任务(默认为闲鱼)时才拦截。
+        needs_login = any(
+            (task.get("platform") or "xianyu").lower() == "xianyu"
+            for task in active_task_configs
+        )
+        if needs_login:
+            sys.exit(
+                f"错误: 未找到登录状态文件。请在 state/ 中添加账号或配置 account_state_file。"
+            )
 
     # 为每个启用的任务创建一个异步执行协程
     stop_event = asyncio.Event()

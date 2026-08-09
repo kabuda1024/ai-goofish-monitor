@@ -115,3 +115,60 @@ def test_cli_runs_keyword_mode_without_prompt_files(tmp_path, load_json_fixture,
     assert len(captured) == 1
     assert captured[0]["decision_mode"] == "keyword"
     assert captured[0]["ai_prompt_text"] == ""
+
+
+def test_cli_task_name_targeting_non_xianyu_task_ignores_unrelated_xianyu_login_check(
+    tmp_path, load_json_fixture, monkeypatch
+):
+    """回归测试:--task-name 只跑 hoyoyo 任务时,不应因为配置里存在别的
+    (甚至已启用的)闲鱼任务而被登录态检查拦截——该检查此前是对整个
+    任务列表判断的,与本次实际要执行的任务无关。"""
+    fake_scrapers = types.ModuleType("src.scrapers")
+
+    async def placeholder(task_config, debug_limit):
+        return 0
+
+    fake_scrapers.get_scraper_class = lambda name=None: _make_fake_scraper_class(placeholder)
+    monkeypatch.setitem(sys.modules, "src.scrapers", fake_scrapers)
+    sys.modules.pop("spider_v2", None)
+
+    spider_v2 = importlib.import_module("spider_v2")
+    config_data = load_json_fixture("config.sample.json")
+    # Sony A7M4 保持默认(未填 platform => xianyu)且 enabled=True。
+    config_data.append({
+        "task_name": "IMAC-hoyoyo",
+        "enabled": True,
+        "keyword": "imac",
+        "description": "",
+        "max_pages": 1,
+        "personal_only": False,
+        "platform": "hoyoyo",
+        "decision_mode": "keyword",
+        "keyword_rules": ["imac"],
+    })
+
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config_data, ensure_ascii=False), encoding="utf-8")
+
+    missing_state_path = tmp_path / "does_not_exist_state.json"
+    monkeypatch.setattr(spider_v2, "STATE_FILE", str(missing_state_path))
+    monkeypatch.setattr(spider_v2.os, "getenv", lambda key, default=None: str(tmp_path / "no_such_state_dir") if key == "ACCOUNT_STATE_DIR" else default)
+
+    captured = []
+
+    async def fake_scrape_hoyoyo(task_config, debug_limit):
+        captured.append(task_config["task_name"])
+        return 1
+
+    monkeypatch.setattr(
+        spider_v2, "get_scraper_class",
+        lambda name=None: _make_fake_scraper_class(fake_scrape_hoyoyo),
+    )
+    monkeypatch.setattr(
+        sys, "argv",
+        ["spider_v2.py", "--config", str(config_path), "--task-name", "IMAC-hoyoyo"],
+    )
+
+    asyncio.run(spider_v2.main())
+
+    assert captured == ["IMAC-hoyoyo"]
